@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test1-pod
+  labels:
+    app: test1
+    role: backend
+    env: development
+spec:
+  containers:
+  - name: test1-container
+    image: myssh 
+    imagePullPolicy: Never
+    ports:
+      - containerPort: 5432
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "500m"
+      limits:
+        memory: "512Mi"
+        cpu: "1"
+    env:
+      - name: POSTGRES_DB
+        value: "postgres"
+      - name: POSTGRES_USER
+        value: "postgres"
+      - name: POSTGRES_PASSWORD
+        value: "0000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test1-svc
+  labels:
+    app: test1
+spec:
+
+  selector:
+    app: test1
+    role: backend
+    env: development
+  type: NodePort
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+      nodePort: 30008

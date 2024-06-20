@@ -1,0 +1,140 @@
+#replica.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: replica1-pv
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 2Gi
+  hostPath:
+    path: /data/replica1
+  storageClassName: standard
+
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: replica1-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  volumeName: replica1-pv
+
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: replica1-secret
+type: Opaque
+data:
+  POSTGRES_USER: cG9zdGdyZXM=  #  echo -n postgres | base64
+  POSTGRES_PASSWORD: MDAwMA==  # echo -n 0000 | base64
+  REPLICATION_PASSWORD: MDAwMA==
+
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: replica1
+  labels:
+    app: postgres
+    role: replica1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+      role: replica1
+  serviceName: replica1
+  template:
+    metadata:
+      labels:
+        app: postgres
+        role: replica1
+    spec:
+
+      containers:
+        - name: replica1
+          image: myssh 
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]  # 清空目標資料夾後才能basebackup, 啟動資料庫, 最後 tail 防止命令執行完畢後容器直接關閉
+          args:
+            - |
+              until pg_isready -h $POSTGRES_PRIMARY_HOST -p 5432; do
+                sleep 1;
+              done;
+              echo "DB is started! Deleting /var/lib/postgresql/data";
+              if [ "$(ls -A /var/lib/postgresql/data)" ]; then
+                rm -rf /var/lib/postgresql/data/*;
+              fi
+
+              pg_basebackup -h postgres-svc -p 5432 -R -U postgres -D /var/lib/postgresql/data --checkpoint=fast;
+              echo "pg_basebackup completed successfully.";
+
+              chown -R postgres:postgres /var/lib/postgresql/data;
+              chmod 0700  /var/lib/postgresql/data;
+              su -c '/usr/lib/postgresql/16/bin/pg_ctl start -D /var/lib/postgresql/data' - postgres;
+              echo "PostgreSQL started successfully.";
+              tail -f /dev/null;
+
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  key: POSTGRES_USER
+                  name: replica1-secret
+
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: POSTGRES_PASSWORD
+                  name: replica1-secret
+
+            - name: REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: REPLICATION_PASSWORD
+                  name: replica1-secret
+
+            - name: POSTGRES_PRIMARY_HOST
+              value: postgres-svc
+
+          ports:
+            - containerPort: 5432
+              name: replica1
+              protocol: TCP
+
+          volumeMounts:
+            - name: replica1-volume
+              mountPath: /var/lib/postgresql/data
+
+      volumes:
+        - name: replica1-volume
+          persistentVolumeClaim:
+            claimName: replica1-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: replica1-svc  # service 名稱
+  labels:
+    app: postgres
+    role: replica1
+spec:
+  selector:  # 要將流量發送到的 pod
+    app: postgres
+    role: replica1
+  type: NodePort
+  ports:
+    - name: postgres  # 端口名稱
+      port: 5432        # service 端口
+      targetPort: 5432  # 目標 pod 端口
+      protocol: TCP
