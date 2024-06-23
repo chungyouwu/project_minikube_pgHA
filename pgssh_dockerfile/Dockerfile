@@ -1,5 +1,5 @@
 FROM postgres:16
-RUN apt-get update && apt-get install -y openssh-server
+RUN apt-get update && apt-get install -y openssh-server sshpass
 RUN apt-get install -y curl 
 RUN mkdir /var/run/sshd && \
     echo 'root:0000' | chpasswd && \

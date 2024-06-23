@@ -11,6 +11,13 @@ spec:
   - name: test-container
     image: myssh
     imagePullPolicy: Never 
+    command: ["/bin/sh", "-c"]
+    args:
+      - |
+        service ssh start && \
+        tail -f /dev/null
+
+
     ports:
       - containerPort: 5432
     resources:

@@ -169,13 +169,13 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
     NODE_ID="$1"
     NODE_HOST="$2"
     NODE_PORT="$3"
-    NODE_PGDATA="$4"
+    NODE_PGDATA="/var/lib/postgresql/data"
     NEW_PRIMARY_NODE_ID="$5"
     OLD_MAIN_NODE_ID="$6"
     NEW_PRIMARY_NODE_HOST="$7"
     OLD_PRIMARY_NODE_ID="$8"
     NEW_PRIMARY_NODE_PORT="$9"
-    NEW_PRIMARY_NODE_PGDATA="${10}"
+    NEW_PRIMARY_NODE_PGDATA="/var/lib/postgresql/data"
 
     RECOVERYCONF=${NODE_PGDATA}/myrecovery.conf
     PGHOME="/usr/libexec/postgresql15/"
@@ -207,30 +207,30 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
 
 
     # Check the connection status of Standby
-      ${PGHOME}/bin/pg_isready -h ${NODE_HOST} -p ${NODE_PORT} > /dev/null
+      pg_isready -h ${NODE_HOST} -p ${NODE_PORT} > /dev/null
       if [ $? -ne 0 ]; then
           echo "follow_primary.sh: node_id=${NODE_ID} is not running. skipping follow primary command" >> &log
           exit 0
       fi
 
     # Test passwordless SSH
-      ssh -T ${SSH_OPTIONS} ${POSTGRESQL_STARTUP_USER}@${NEW_PRIMARY_NODE_HOST} ls /tmp > /dev/null    
+      sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NEW_PRIMARY_NODE_HOST} ls /tmp > /dev/null    
       if [ $? -ne 0 ]; then
-          echo "follow_main.sh: passwordless SSH to ${POSTGRESQL_STARTUP_USER}@${NEW_PRIMARY_NODE_HOST} failed. Please setup passwordless SSH." >> $log
+          echo "follow_main.sh: passwordless SSH to root@${NEW_PRIMARY_NODE_HOST} failed. Please setup passwordless SSH." >> $log
           exit 1
       fi
 
     
     # Run checkpoint command to update control file before running pg_rewind
-      ${PGHOME}/bin/psql -h ${NEW_PRIMARY_NODE_HOST} -p ${NEW_PRIMARY_NODE_PORT} postgres -c "checkpoint;"
+      psql -h ${NEW_PRIMARY_NODE_HOST} -p ${NEW_PRIMARY_NODE_PORT} -U postgres -d postgres -c "checkpoint;"
       echo "follow_primary.sh: pg_rewind for node ${NODE_ID}" >> $log
 
     # GO
-      ssh -T ${SSH_OPTIONS} ${POSTGRESQL_STARTUP_USER}@${NODE_HOST} "
+      sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NEW_PRIMARY_NODE_HOST} "
       
         set -o errexit      
-        ${PGHOME}/bin/pg_ctl -w -m f -D ${NODE_PGDATA} stop      
-        ${PGHOME}/bin/pg_rewind -D ${NODE_PGDATA} --source-server=\"user=${POSTGRESQL_STARTUP_USER} host=${NEW_PRIMARY_NODE_HOST} port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\"      
+        pg_ctl -w -m f -D ${NODE_PGDATA} stop      
+        pg_rewind -D ${NODE_PGDATA} --source-server=\"user=postgres password=0000 host=${NEW_PRIMARY_NODE_HOST} port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\"      
         cat > ${RECOVERYCONF} << EOT
         primary_conninfo = 'host=${NEW_PRIMARY_NODE_HOST} port=${NEW_PRIMARY_NODE_PORT} user=${REPLUSER} application_name=${NODE_HOST} passfile=''/var/lib/pgsql/.pgpass'''
         recovery_target_timeline = 'latest'     
@@ -240,12 +240,12 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
                -e \"/^include_if_exists = '$(echo ${RECOVERYCONF} | sed -e 's/\//\\\//g')'/d\" ${NODE_PGDATA}/postgresql.conf
         touch ${NODE_PGDATA}/standby.signal
 
-        ${PGHOME}/bin/pg_ctl -l /dev/null -w -D ${NODE_PGDATA} start
+        pg_ctl -l /dev/null -w -D ${NODE_PGDATA} start
       "
 
     # If start Standby successfully, Run pcp_attact_node to attach Standby node to Pgpool-II.
       if [ $? -eq 0 ]; then
-        ${PGPOOL_PATH}/pcp_attach_node -w -h localhost -U $PCP_USER -p ${PCP_PORT} -n ${NODE_ID}
+        pcp_attach_node -w -h localhost -U $PCP_USER -p ${PCP_PORT} -n ${NODE_ID}
         echo "pcp_attach_node success"
         if [ $? -ne 0 ]; then
             echo "ERROR: follow_primary.sh: end: pcp_attach_node failed" >> $log

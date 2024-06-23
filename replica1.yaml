@@ -83,7 +83,7 @@ spec:
               chmod 0700  /var/lib/postgresql/data;
               su -c '/usr/lib/postgresql/16/bin/pg_ctl start -D /var/lib/postgresql/data' - postgres;
               echo "PostgreSQL started successfully.";
-              tail -f /dev/null;
+              service ssh start && tail -f /dev/null;
 
           env:
             - name: POSTGRES_USER
