@@ -120,6 +120,26 @@ spec:
         - name: replica2-volume
           persistentVolumeClaim:
             claimName: replica2-pvc
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: replica2-svc  # service 名稱
+#   labels:
+#     app: postgres
+#     role: replica2
+# spec:
+#   selector:  # 要將流量發送到的 pod
+#     app: postgres
+#     role: replica2
+#   type: NodePort
+#   ports:
+#     - name: postgres  # 端口名稱
+#       port: 5432        # service 端口
+#       targetPort: 5432  # 目標 pod 端口
+#       protocol: TCP
+
+
 ---
 apiVersion: v1
 kind: Service
@@ -129,12 +149,10 @@ metadata:
     app: postgres
     role: replica2
 spec:
-  selector:  # 要將流量發送到的 pod
+  clusterIP: None # headless service
+  selector:
     app: postgres
     role: replica2
-  type: NodePort
   ports:
-    - name: postgres  # 端口名稱
-      port: 5432        # service 端口
-      targetPort: 5432  # 目標 pod 端口
-      protocol: TCP
+    - name: postgres
+      port: 5432
