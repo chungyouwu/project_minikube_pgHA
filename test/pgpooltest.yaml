@@ -21,10 +21,7 @@ data:
     backend_port1 = 5432
     backend_weight1 = 2
     backend_flag1 = 'ALLOW_TO_FAILOVER'
-    backend_hostname2 = 'replica2-svc'
-    backend_port2 = 5432
-    backend_weight2 = 2
-    backend_flag2 = 'ALLOW_TO_FAILOVER'
+
 
     sr_check_period = 10
     sr_check_user = 'postgres'
@@ -182,15 +179,15 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
 
     date >> $log
     echo "node_id: $NODE_ID" >> $log
-    echo "host_name: $NODE_HOST" >> $log
+    echo "node_host: $NODE_HOST" >> $log
     echo "node_port: $NODE_PORT" >> $log
-    echo "node_DB_cluster_path: $NODE_PGDATA" >> $log
-    echo "new_main_id: $NEW_PRIMARY_NODE_ID" >> $log
-    echo "old_main_id: $OLD_MAIN_NODE_ID" >> $log
-    echo "new_main_host_name: $NEW_PRIMARY_NODE_HOST" >> $log
+    echo "node_pgdata: $NODE_PGDATA" >> $log
+    echo "new_primary_node_id: $NEW_PRIMARY_NODE_ID" >> $log
+    echo "old_main_node_id: $OLD_MAIN_NODE_ID" >> $log
+    echo "new_primary_node_host: $NEW_PRIMARY_NODE_HOST" >> $log
     echo "old_primary_node_id: $OLD_PRIMARY_NODE_ID" >> $log
-    echo "new_main_port_number: $NEW_PRIMARY_NODE_PORT" >> $log
-    echo "new_main_db_cluster: $NEW_PRIMARY_NODE_PGDATA" >> $log
+    echo "new_primary_node_port: $NEW_PRIMARY_NODE_PORT" >> $log
+    echo "new_primary_node_pgdata: $NEW_PRIMARY_NODE_PGDATA" >> $log
     echo "myrecovery.conf: $RECOVERYCONF" >> $log
     echo "pghome: $PGHOME" >> $log
 
@@ -198,7 +195,8 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
     NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
     TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
     API_SERVER="https://kubernetes.default.svc"
-    POD_NAME="replica2-0"
+
+    POD_NAME="replica1-0"
     POD_IP=$(curl -sSk -H "Authorization: Bearer $TOKEN" ${API_SERVER}/api/v1/namespaces/${NAMESPACE}/pods/${POD_NAME} | grep -o '"podIP": "[^"]*' | sed 's/"podIP": "//')
     
     echo "namespace: ${NAMESPACE}" >> $log
@@ -207,32 +205,36 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
 
 
     # Check the connection status of Standby
-      pg_isready -h ${NODE_HOST} -p ${NODE_PORT} > /dev/null
-      if [ $? -ne 0 ]; then
-          echo "follow_primary.sh: node_id=${NODE_ID} is not running. skipping follow primary command" >> &log
+      pg_isready -h ${NODE_HOST}.default.svc.cluster.local -p ${NODE_PORT} > /dev/null      
+      if [ $? = 0 ]; then
+          echo "CHUNG: node_id=${NODE_ID}" is running!
+      else
+          echo "CHUNG: node_id=${NODE_ID} is not running. skipping follow primary command" >> $log
           exit 0
       fi
 
     # Test passwordless SSH
-      sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NEW_PRIMARY_NODE_HOST} ls /tmp > /dev/null    
-      if [ $? -ne 0 ]; then
-          echo "follow_main.sh: passwordless SSH to root@${NEW_PRIMARY_NODE_HOST} failed. Please setup passwordless SSH." >> $log
+      sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local ls /tmp > /dev/null    
+      if [ $? = 0 ]; then
+          echo "CHUNG: sshpass  successed"
+      else
+          echo "CHUNG: passwordless SSH to root@${NEW_PRIMARY_NODE_HOST} failed." >> $log
           exit 1
       fi
 
     
     # Run checkpoint command to update control file before running pg_rewind
-      psql -h ${NEW_PRIMARY_NODE_HOST} -p ${NEW_PRIMARY_NODE_PORT} -U postgres -d postgres -c "checkpoint;"
+      psql -h ${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local -p ${NEW_PRIMARY_NODE_PORT} -U postgres -d postgres -c "checkpoint;"
       echo "follow_primary.sh: pg_rewind for node ${NODE_ID}" >> $log
 
     # GO
-      sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NEW_PRIMARY_NODE_HOST} "
+      sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local "
       
         set -o errexit      
-        pg_ctl -w -m f -D ${NODE_PGDATA} stop      
-        pg_rewind -D ${NODE_PGDATA} --source-server=\"user=postgres password=0000 host=${NEW_PRIMARY_NODE_HOST} port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\"      
+        su -c '/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/data stop' - postgres
+        su -c "pg_rewind -D ${NODE_PGDATA} --source-server=\"user=postgres password=0000 host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\"" - postgres      
         cat > ${RECOVERYCONF} << EOT
-        primary_conninfo = 'host=${NEW_PRIMARY_NODE_HOST} port=${NEW_PRIMARY_NODE_PORT} user=${REPLUSER} application_name=${NODE_HOST} passfile=''/var/lib/pgsql/.pgpass'''
+        primary_conninfo = 'host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} user=postgres application_name=${NODE_HOST} passfile=''/var/lib/pgsql/.pgpass'''
         recovery_target_timeline = 'latest'     
         EOT
 
@@ -240,7 +242,7 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
                -e \"/^include_if_exists = '$(echo ${RECOVERYCONF} | sed -e 's/\//\\\//g')'/d\" ${NODE_PGDATA}/postgresql.conf
         touch ${NODE_PGDATA}/standby.signal
 
-        pg_ctl -l /dev/null -w -D ${NODE_PGDATA} start
+        su -c "pg_ctl -l /dev/null -w -D ${NODE_PGDATA} start" - postgres
       "
 
     # If start Standby successfully, Run pcp_attact_node to attach Standby node to Pgpool-II.

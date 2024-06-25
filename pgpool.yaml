@@ -182,15 +182,15 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
 
     date >> $log
     echo "node_id: $NODE_ID" >> $log
-    echo "host_name: $NODE_HOST" >> $log
+    echo "node_host: $NODE_HOST" >> $log
     echo "node_port: $NODE_PORT" >> $log
-    echo "node_DB_cluster_path: $NODE_PGDATA" >> $log
-    echo "new_main_id: $NEW_PRIMARY_NODE_ID" >> $log
-    echo "old_main_id: $OLD_MAIN_NODE_ID" >> $log
-    echo "new_main_host_name: $NEW_PRIMARY_NODE_HOST" >> $log
+    echo "node_pgdata: $NODE_PGDATA" >> $log
+    echo "new_primary_node_id: $NEW_PRIMARY_NODE_ID" >> $log
+    echo "old_main_node_id: $OLD_MAIN_NODE_ID" >> $log
+    echo "new_primary_node_host: $NEW_PRIMARY_NODE_HOST" >> $log
     echo "old_primary_node_id: $OLD_PRIMARY_NODE_ID" >> $log
-    echo "new_main_port_number: $NEW_PRIMARY_NODE_PORT" >> $log
-    echo "new_main_db_cluster: $NEW_PRIMARY_NODE_PGDATA" >> $log
+    echo "new_main_node_port: $NEW_PRIMARY_NODE_PORT" >> $log
+    echo "new_primary_node_pgdata: $NEW_PRIMARY_NODE_PGDATA" >> $log
     echo "myrecovery.conf: $RECOVERYCONF" >> $log
     echo "pghome: $PGHOME" >> $log
 
@@ -209,7 +209,7 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
     # Check the connection status of Standby
       pg_isready -h ${NODE_HOST} -p ${NODE_PORT} > /dev/null
       if [ $? -ne 0 ]; then
-          echo "follow_primary.sh: node_id=${NODE_ID} is not running. skipping follow primary command" >> &log
+          echo "follow_primary.sh: node_id=${NODE_ID} is not running. skipping follow primary command" >> $log
           exit 0
       fi
 
