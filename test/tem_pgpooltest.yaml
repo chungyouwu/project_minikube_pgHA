@@ -152,26 +152,18 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
     
     set -o xtrace
     
-    # Special values:
-    # 1)  %d = node id
-    # 2)  %h = hostname
-    # 3)  %p = port number
-    # 4)  %D = node database cluster path
-    # 5)  %m = new primary node id
-    # 6)  %M = old main node id
-    # 7)  %H = new primary node hostname
-    # 8)  %P = old primary node id
-    # 9)  %r = new primary port number
-    # 10) %R = new primary database cluster path
-    # 11) %N = old primary node hostname
-    # 12) %S = old primary node port number
-    # 13) %% = '%' character
 
     NODE_ID="$1"
+    NODE_ID_TRIMMED=$(echo "$NODE_ID" | sed 's/^ *//;s/ *$//')
+
     NODE_HOST="$2"
     NODE_PORT="$3"
+    NODE_PORT_TRIMMED=$(echo "$NODE_PORT" | sed 's/^ *//;s/ *$//')
+
     NODE_PGDATA="/var/lib/postgresql/data"
     NEW_PRIMARY_NODE_ID="$5"
+    NEW_PRIMARY_NODE_ID_TRIMMED=$(echo "$NEW_PRIMARY_NODE_ID" | sed 's/^ *//;s/ *$//')
+
     OLD_MAIN_NODE_ID="$6"
     NEW_PRIMARY_NODE_HOST="$7"
     OLD_PRIMARY_NODE_ID="$8"
@@ -183,88 +175,40 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
 
     date >> $log
     echo "node_id: $NODE_ID" >> $log
+    echo "node_id_trimmed: $NODE_ID_TRIMMED" >> $log
     echo "node_host: $NODE_HOST" >> $log
     echo "node_port: $NODE_PORT" >> $log
-    echo "node_pgdata: $NODE_PGDATA" >> $log
-
+    echo "node_port_trimmed: $NODE_PORT_TRIMMED" >> $log
     echo "old_primary_node_id: $OLD_PRIMARY_NODE_ID" >> $log
     echo "old_main_node_id: $OLD_MAIN_NODE_ID" >> $log
 
     echo "new_primary_node_id: $NEW_PRIMARY_NODE_ID" >> $log
+    echo "new_primary_node_id_trimmed: $NEW_PRIMARY_NODE_ID_TRIMMED" >> $log
     echo "new_primary_node_host: $NEW_PRIMARY_NODE_HOST" >> $log    
     echo "new_primary_node_port: $NEW_PRIMARY_NODE_PORT" >> $log
     echo "new_primary_node_pgdata: $NEW_PRIMARY_NODE_PGDATA" >> $log
     
+    echo "node_pgdata: $NODE_PGDATA" >> $log
     echo "myrecovery.conf: $RECOVERYCONF" >> $log
     echo "pghome: $PGHOME" >> $log
 
-
-    NAMESPACE=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
-    TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
-    API_SERVER="https://kubernetes.default.svc"
-
-    POD_NAME="replica1-0"
-    POD_IP=$(curl -sSk -H "Authorization: Bearer $TOKEN" ${API_SERVER}/api/v1/namespaces/${NAMESPACE}/pods/${POD_NAME} | grep -o '"podIP": "[^"]*' | sed 's/"podIP": "//')
+  
     
-    echo "namespace: ${NAMESPACE}" >> $log
-    echo "api_server: ${API_SERVER}" >> $log    
-    echo "pod_ip: ${POD_IP}" >> $log
+    sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NODE_HOST}.default.svc.cluster.local "
+    if [ $NODE_ID_TRIMMED -ne $OLD_MAIN_NODE_ID ]; then
+      chown -R postgres:postgres ${NODE_PGDATA}
+      chmod 0700 ${NODE_PGDATA} 
 
-
-    # Check the connection status of Standby
-      pg_isready -h ${NODE_HOST}.default.svc.cluster.local -p ${NODE_PORT} > /dev/null      
-      if [ $? = 0 ]; then
-          echo "CHUNG: node_id=${NODE_ID}" is running! >> $log
-      else
-          echo "CHUNG: node_id=${NODE_ID} is not running. skipping follow primary command" >> $log
-          
-      fi
-
-    # Test passwordless SSH
-      sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local ls /tmp > /dev/null    
-      if [ $? = 0 ]; then
-          echo "CHUNG: sshpass  successed" >> $log
-      else
-          echo "CHUNG: passwordless SSH to root@${NEW_PRIMARY_NODE_HOST} failed." >> $log
-          
-      fi
-
+      su -c \"/usr/lib/postgresql/16/bin/pg_isready -h localhost -p 5432\" - postgres
+      su -c \"/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/data stop\" - postgres
+      su -c \"/usr/lib/postgresql/16/bin/pg_rewind -D ${NODE_PGDATA} --source-server=\"user=postgres password=0000 host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\"\" - postgres
     
-    # Run checkpoint command to update control file before running pg_rewind
-      psql -h ${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local -p ${NEW_PRIMARY_NODE_PORT} -U postgres -d postgres -c "checkpoint;"
-      if [ $? = 0 ]; then
-          echo "CHUNG: ${NEW_PRIMARY_NODE_HOST} checkpoint successed" >> $log
-      else
-          echo "CHUNG: ${NEW_PRIMARY_NODE_HOST} checkpoint failed." >> $log
-          
-      fi
+    else
+      echo "node_id is old_main_node_id"
+    fi      
+    "
 
-    # GO
-      sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local "
-      pg_isready > /dev/null      
-      if [ $? = 0 ]; then
-          echo "CHUNG: node_id=${NODE_ID} is running! go update" >> $log
-          set -o errexit      
-          su -c '/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/data stop' - postgres
-          su -c "pg_rewind -D ${NODE_PGDATA} --source-server=\"user=postgres password=0000 host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\"" - postgres      
-          cat > ${RECOVERYCONF} << EOT
-          primary_conninfo = 'host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} user=postgres application_name=${NODE_HOST} passfile=''/var/lib/pgsql/.pgpass'''
-          recovery_target_timeline = 'latest'     
-          EOT
-
-          sed -i -e \"\\\$ainclude_if_exists = '$(echo ${RECOVERYCONF} | sed -e 's/\//\\\//g')'\" \
-                 -e \"/^include_if_exists = '$(echo ${RECOVERYCONF} | sed -e 's/\//\\\//g')'/d\" ${NODE_PGDATA}/postgresql.conf
-          touch ${NODE_PGDATA}/standby.signal
-
-          su -c "pg_ctl -l /dev/null -w -D ${NODE_PGDATA} start" - postgres
-
-      else
-          echo "CHUNG: node_id=${NODE_ID} is not running. skip update" >> $log
-          
-      fi           
-
-      "
-
+    echo "==============="
 
 
 
