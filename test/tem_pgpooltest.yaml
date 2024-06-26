@@ -194,7 +194,7 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
     echo "new_primary_node_host: $NEW_PRIMARY_NODE_HOST" >> $log    
     echo "new_primary_node_port: $NEW_PRIMARY_NODE_PORT" >> $log
     echo "new_primary_node_pgdata: $NEW_PRIMARY_NODE_PGDATA" >> $log
-
+    
     echo "myrecovery.conf: $RECOVERYCONF" >> $log
     echo "pghome: $PGHOME" >> $log
 
@@ -214,56 +214,58 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
     # Check the connection status of Standby
       pg_isready -h ${NODE_HOST}.default.svc.cluster.local -p ${NODE_PORT} > /dev/null      
       if [ $? = 0 ]; then
-          echo "CHUNG: node_id=${NODE_ID} is running!" >> $log
+          echo "CHUNG: node_id=${NODE_ID}" is running! >> $log
       else
           echo "CHUNG: node_id=${NODE_ID} is not running. skipping follow primary command" >> $log
-          exit 0
+          
       fi
 
     # Test passwordless SSH
       sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local ls /tmp > /dev/null    
       if [ $? = 0 ]; then
-          echo "CHUNG: sshpass  successed"
+          echo "CHUNG: sshpass  successed" >> $log
       else
           echo "CHUNG: passwordless SSH to root@${NEW_PRIMARY_NODE_HOST} failed." >> $log
-          exit 1
+          
       fi
 
     
     # Run checkpoint command to update control file before running pg_rewind
       psql -h ${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local -p ${NEW_PRIMARY_NODE_PORT} -U postgres -d postgres -c "checkpoint;"
-      echo "follow_primary.sh: pg_rewind for node ${NODE_ID}" >> $log
+      if [ $? = 0 ]; then
+          echo "CHUNG: ${NEW_PRIMARY_NODE_HOST} checkpoint successed" >> $log
+      else
+          echo "CHUNG: ${NEW_PRIMARY_NODE_HOST} checkpoint failed." >> $log
+          
+      fi
 
     # GO
       sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local "
-      
-        set -o errexit      
-        su -c '/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/data stop' - postgres
-        su -c "pg_rewind -D ${NODE_PGDATA} --source-server=\"user=postgres password=0000 host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\"" - postgres      
-        cat > ${RECOVERYCONF} << EOT
-        primary_conninfo = 'host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} user=postgres application_name=${NODE_HOST} passfile=''/var/lib/pgsql/.pgpass'''
-        recovery_target_timeline = 'latest'     
-        EOT
+      pg_isready > /dev/null      
+      if [ $? = 0 ]; then
+          echo "CHUNG: node_id=${NODE_ID} is running! go update" >> $log
+          set -o errexit      
+          su -c '/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/data stop' - postgres
+          su -c "pg_rewind -D ${NODE_PGDATA} --source-server=\"user=postgres password=0000 host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\"" - postgres      
+          cat > ${RECOVERYCONF} << EOT
+          primary_conninfo = 'host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} user=postgres application_name=${NODE_HOST} passfile=''/var/lib/pgsql/.pgpass'''
+          recovery_target_timeline = 'latest'     
+          EOT
 
-        sed -i -e \"\\\$ainclude_if_exists = '$(echo ${RECOVERYCONF} | sed -e 's/\//\\\//g')'\" \
-               -e \"/^include_if_exists = '$(echo ${RECOVERYCONF} | sed -e 's/\//\\\//g')'/d\" ${NODE_PGDATA}/postgresql.conf
-        touch ${NODE_PGDATA}/standby.signal
+          sed -i -e \"\\\$ainclude_if_exists = '$(echo ${RECOVERYCONF} | sed -e 's/\//\\\//g')'\" \
+                 -e \"/^include_if_exists = '$(echo ${RECOVERYCONF} | sed -e 's/\//\\\//g')'/d\" ${NODE_PGDATA}/postgresql.conf
+          touch ${NODE_PGDATA}/standby.signal
 
-        su -c "pg_ctl -l /dev/null -w -D ${NODE_PGDATA} start" - postgres
+          su -c "pg_ctl -l /dev/null -w -D ${NODE_PGDATA} start" - postgres
+
+      else
+          echo "CHUNG: node_id=${NODE_ID} is not running. skip update" >> $log
+          
+      fi           
+
       "
 
-    # If start Standby successfully, Run pcp_attact_node to attach Standby node to Pgpool-II.
-      if [ $? -eq 0 ]; then
-        pcp_attach_node -w -h localhost -U $PCP_USER -p ${PCP_PORT} -n ${NODE_ID}
-        echo "pcp_attach_node success"
-        if [ $? -ne 0 ]; then
-            echo "ERROR: follow_primary.sh: end: pcp_attach_node failed" >> $log
-            exit 1
-        fi
-      fi
-    
-    echo "follow_primary.sh: end: follow primary command is completed successfully" >> $log
-    exit 0
+
 
 
 
