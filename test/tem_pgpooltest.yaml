@@ -202,14 +202,36 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
       su -c \"/usr/lib/postgresql/16/bin/pg_isready -h localhost -p 5432\" - postgres
       su -c \"/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/data stop\" - postgres
       su -c \"/usr/lib/postgresql/16/bin/pg_rewind -D ${NODE_PGDATA} --source-server=\\\"user=postgres password=0000 host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\\\"\" - postgres
+      
+      echo \"primary_conninfo = host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} user=postgres application_name=${NODE_HOST}\" >> ${RECOVERYCONF} 
+      echo \"recovery_target_timeline = latest\" >> ${RECOVERYCONF}
+      
+
+      sed -i -e \"\\\$ainclude_if_exists = $(echo ${RECOVERYCONF}\" ${NODE_PGDATA}/postgresql.conf
+      sed -i -e \"/^include_if_exists = $(echo ${RECOVERYCONF}\" ${NODE_PGDATA}/postgresql.conf
+
+      touch ${NODE_PGDATA}/standby.signal
+
+      su -c \"/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/data start\" - postgres
+
     
     else
-      echo "node_id is old_main_node_id"
+      echo \"node_id is old_main_node_id\"
     fi      
     "
 
-    echo "==============="
 
+
+    if [ $NODE_ID_TRIMMED -ne $OLD_MAIN_NODE_ID ]; then
+      /opt/pgpool-II/bin/pcp_attach_node -w -h localhost -U pgpool -p 9898 -n ${NODE_ID}
+      echo "pcp_attach_node success"
+    else
+      echo "CHUNG: pcp_attach_node failed" >> $log
+      exit 1    
+    fi
+    
+    echo "CHUNG: follow primary command is completed successfully" >> $log
+    exit 0
 
 
 
@@ -247,8 +269,10 @@ spec:
                   mkdir /test/;
                   cp /script/failover.sh /test/;
                   cp /script/follow_primary.sh /test/;
-                  chmod 777 /test/failover.sh
-                  chmod 777 /test/follow_primary.sh
+                  chmod 777 /test/failover.sh;
+                  chmod 777 /test/follow_primary.sh;
+                  echo 'localhost:9898:pgpool:0000' >> /root/.pcppass;
+                  chmod 600 /root/.pcppass;
         env:
         - name: POSTGRES_USERNAME  #在postgres-secret變數為 POSTGRES_USER
           valueFrom:
@@ -287,6 +311,9 @@ spec:
             secretKeyRef:
               name: postgres-secret
               key: PGPOOL_PCP_PASSWORD
+
+        - name: PCPPASSFILE
+          value: "/root/.pcppass"
 
         volumeMounts:
         - name: pgpool-config

@@ -37,8 +37,8 @@ data:
   POSTGRES_USER: cG9zdGdyZXM=  #  echo -n postgres | base64
   POSTGRES_PASSWORD: MDAwMA==  # echo -n 0000 | base64
   REPLICATION_PASSWORD: MDAwMA==
-  PGPOOL_PCP_USER:  cG9zdGdyZXM=
-  PGPOOL_PCP_PASSWORD:  MDAwMA== 
+  PGPOOL_PCP_USER: cGdwb29s
+  PGPOOL_PCP_PASSWORD: MDAwMA== 
 
 
 ---
