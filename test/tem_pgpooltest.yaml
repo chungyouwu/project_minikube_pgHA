@@ -201,7 +201,7 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
 
       su -c \"/usr/lib/postgresql/16/bin/pg_isready -h localhost -p 5432\" - postgres
       su -c \"/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/data stop\" - postgres
-      su -c \"/usr/lib/postgresql/16/bin/pg_rewind -D ${NODE_PGDATA} --source-server=\"user=postgres password=0000 host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\"\" - postgres
+      su -c \"/usr/lib/postgresql/16/bin/pg_rewind -D ${NODE_PGDATA} --source-server=\\\"user=postgres password=0000 host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\\\"\" - postgres
     
     else
       echo "node_id is old_main_node_id"
