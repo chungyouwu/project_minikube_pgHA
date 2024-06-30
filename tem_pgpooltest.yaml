@@ -140,7 +140,7 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
   follow_primary.sh: |
     #!/bin/bash
     # This script is run after failover_command to synchronize the Standby with the new Primary.
-    # First try pg_rewind. If pg_rewind failed, use pg_basebackup.
+    # First try pg_rewind. If pg_rewind failed, use pg_basebackup(to be continue...)
     
     log="/test/follow_primary.log"
 
@@ -151,26 +151,20 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
     fi     
     
     set -o xtrace
-    
 
     NODE_ID="$1"
     NODE_ID_TRIMMED=$(echo "$NODE_ID" | sed 's/^ *//;s/ *$//')
-
     NODE_HOST="$2"
     NODE_PORT="$3"
     NODE_PORT_TRIMMED=$(echo "$NODE_PORT" | sed 's/^ *//;s/ *$//')
-
     NODE_PGDATA="/var/lib/postgresql/data"
     NEW_PRIMARY_NODE_ID="$5"
     NEW_PRIMARY_NODE_ID_TRIMMED=$(echo "$NEW_PRIMARY_NODE_ID" | sed 's/^ *//;s/ *$//')
-
     OLD_MAIN_NODE_ID="$6"
     NEW_PRIMARY_NODE_HOST="$7"
     OLD_PRIMARY_NODE_ID="$8"
     NEW_PRIMARY_NODE_PORT="$9"
     NEW_PRIMARY_NODE_PGDATA="/var/lib/postgresql/data"
-
-    RECOVERYCONF=${NODE_PGDATA}/myrecovery.conf
     PGHOME="/usr/libexec/postgresql15/"
 
     date >> $log
@@ -181,46 +175,29 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
     echo "node_port_trimmed: $NODE_PORT_TRIMMED" >> $log
     echo "old_primary_node_id: $OLD_PRIMARY_NODE_ID" >> $log
     echo "old_main_node_id: $OLD_MAIN_NODE_ID" >> $log
-
     echo "new_primary_node_id: $NEW_PRIMARY_NODE_ID" >> $log
     echo "new_primary_node_id_trimmed: $NEW_PRIMARY_NODE_ID_TRIMMED" >> $log
     echo "new_primary_node_host: $NEW_PRIMARY_NODE_HOST" >> $log    
     echo "new_primary_node_port: $NEW_PRIMARY_NODE_PORT" >> $log
     echo "new_primary_node_pgdata: $NEW_PRIMARY_NODE_PGDATA" >> $log
-    
     echo "node_pgdata: $NODE_PGDATA" >> $log
-    echo "myrecovery.conf: $RECOVERYCONF" >> $log
-    echo "pghome: $PGHOME" >> $log
-
-  
     
     sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NODE_HOST}.default.svc.cluster.local "
     if [ $NODE_ID_TRIMMED -ne $OLD_MAIN_NODE_ID ]; then
       chown -R postgres:postgres ${NODE_PGDATA}
-      chmod 0700 ${NODE_PGDATA} 
-
+      chmod 0700 ${NODE_PGDATA}
       su -c \"/usr/lib/postgresql/16/bin/pg_isready -h localhost -p 5432\" - postgres
       su -c \"/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/data stop\" - postgres
       su -c \"/usr/lib/postgresql/16/bin/pg_rewind -D ${NODE_PGDATA} --source-server=\\\"user=postgres password=0000 host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\\\"\" - postgres
-      
-      echo \"primary_conninfo = host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} user=postgres application_name=${NODE_HOST}\" >> ${RECOVERYCONF} 
-      echo \"recovery_target_timeline = latest\" >> ${RECOVERYCONF}
-      
-
-      sed -i -e \"\\\$ainclude_if_exists = $(echo ${RECOVERYCONF}\" ${NODE_PGDATA}/postgresql.conf
-      sed -i -e \"/^include_if_exists = $(echo ${RECOVERYCONF}\" ${NODE_PGDATA}/postgresql.conf
-
+      echo \"primary_conninfo = 'host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} user=postgres application_name=${NODE_HOST}'\" >> ${NODE_PGDATA}/postgresql.auto.conf
+      echo \"recovery_target_timeline = latest\" >>  ${NODE_PGDATA}/postgresql.auto.conf
+      sed -i -e \"0,/^primary_conninfo = .*/d\" ${NODE_PGDATA}/postgresql.auto.conf
       touch ${NODE_PGDATA}/standby.signal
-
       su -c \"/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/data start\" - postgres
-
-    
     else
       echo \"node_id is old_main_node_id\"
     fi      
     "
-
-
 
     if [ $NODE_ID_TRIMMED -ne $OLD_MAIN_NODE_ID ]; then
       /opt/pgpool-II/bin/pcp_attach_node -w -h localhost -U pgpool -p 9898 -n ${NODE_ID}

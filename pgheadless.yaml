@@ -37,8 +37,8 @@ data:
   POSTGRES_USER: cG9zdGdyZXM=  #  echo -n postgres | base64
   POSTGRES_PASSWORD: MDAwMA==  # echo -n 0000 | base64
   REPLICATION_PASSWORD: MDAwMA==
-  PGPOOL_PCP_USER:  cG9zdGdyZXM=
-  PGPOOL_PCP_PASSWORD:  MDAwMA== 
+  PGPOOL_PCP_USER: cGdwb29s  # echo -n pgpool | base64
+  PGPOOL_PCP_PASSWORD: MDAwMA==
 
 
 ---
@@ -126,28 +126,6 @@ spec:
             claimName: postgres-pvc
 
 
-# ---
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: postgres-svc
-#   labels:
-#     app: postgres-svc
-#     role: service
-# spec:
-#   selector:
-#     app: postgres
-#     role: service
-#   type: NodePort
-#   ports:
-#     - name: postgres
-#       port: 5432
-#       targetPort: 5432
-#       protocol: TCP
-# 經測試若 postgres-0 沒有使用 headless service
-# 雖 pgpool pod 然仍然可以使用 DNS 當作host  pg_isready -h postgres-svc.default.svc.cluster.local -U postgres -d postgres -p 5432
-# 但 pgpool pod 無法使用 sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@postgres-svc.default.svc.cluster.local 進到 postgres-0 pod
-
 ---
 apiVersion: v1
 kind: Service
@@ -164,3 +142,7 @@ spec:
   ports:
     - name: postgres
       port: 5432
+
+# 經測試若 postgres-0 沒有使用 headless service
+# 雖然 pgpool pod 然仍然可以使用 DNS 當作host  pg_isready -h postgres-svc.default.svc.cluster.local -U postgres -d postgres -p 5432
+# 但 pgpool pod 無法使用 sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@postgres-svc.default.svc.cluster.local 進到 postgres-0 pod
