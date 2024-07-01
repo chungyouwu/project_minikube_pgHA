@@ -2,14 +2,14 @@
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: replica2-pv
+  name: replica1-pv
 spec:
   accessModes:
     - ReadWriteOnce
   capacity:
     storage: 2Gi
   hostPath:
-    path: /data/replica2
+    path: /data/replica1
   storageClassName: standard
 
 
@@ -17,21 +17,21 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: replica2-pvc
+  name: replica1-pvc
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
       storage: 2Gi
-  volumeName: replica2-pv
+  volumeName: replica1-pv
 
 
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: replica2-secret
+  name: replica1-secret
 type: Opaque
 data:
   POSTGRES_USER: cG9zdGdyZXM=  #  echo -n postgres | base64
@@ -43,26 +43,26 @@ data:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: replica2
+  name: replica1
   labels:
     app: postgres
-    role: replica2
+    role: replica1
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: postgres
-      role: replica2
-  serviceName: replica2
+      role: replica1
+  serviceName: replica1
   template:
     metadata:
       labels:
         app: postgres
-        role: replica2
+        role: replica1
     spec:
 
       containers:
-        - name: replica2
+        - name: replica1
           image: myssh 
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]  # 清空目標資料夾後才能basebackup, 啟動資料庫, 最後 tail 防止命令執行完畢後容器直接關閉
@@ -90,69 +90,50 @@ spec:
               valueFrom:
                 secretKeyRef:
                   key: POSTGRES_USER
-                  name: replica2-secret
+                  name: replica1-secret
 
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
                   key: POSTGRES_PASSWORD
-                  name: replica2-secret
+                  name: replica1-secret
 
             - name: REPLICATION_PASSWORD
               valueFrom:
                 secretKeyRef:
                   key: REPLICATION_PASSWORD
-                  name: replica2-secret
+                  name: replica1-secret
 
             - name: POSTGRES_PRIMARY_HOST
               value: postgres-svc
 
           ports:
             - containerPort: 5432
-              name: replica2
+              name: replica1
               protocol: TCP
 
           volumeMounts:
-            - name: replica2-volume
+            - name: replica1-volume
               mountPath: /var/lib/postgresql/data
 
       volumes:
-        - name: replica2-volume
+        - name: replica1-volume
           persistentVolumeClaim:
-            claimName: replica2-pvc
-# ---
-# apiVersion: v1
-# kind: Service
-# metadata:
-#   name: replica2-svc  # service 名稱
-#   labels:
-#     app: postgres
-#     role: replica2
-# spec:
-#   selector:  # 要將流量發送到的 pod
-#     app: postgres
-#     role: replica2
-#   type: NodePort
-#   ports:
-#     - name: postgres  # 端口名稱
-#       port: 5432        # service 端口
-#       targetPort: 5432  # 目標 pod 端口
-#       protocol: TCP
-
+            claimName: replica1-pvc
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: replica2-svc  # service 名稱
+  name: replica1-svc  # service 名稱
   labels:
     app: postgres
-    role: replica2
+    role: replica1
 spec:
   clusterIP: None # headless service
   selector:
     app: postgres
-    role: replica2
+    role: replica1
   ports:
     - name: postgres
       port: 5432
