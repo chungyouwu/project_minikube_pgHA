@@ -1,0 +1,149 @@
+#master2.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres2-pv
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 2Gi
+  hostPath:
+    path: /data/postgres2
+  storageClassName: standard
+
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres2-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  volumeName: postgres2-pv
+
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres2-secret
+type: Opaque
+data:
+  POSTGRES_USER: cG9zdGdyZXM=  #  echo -n postgres | base64
+  POSTGRES_PASSWORD: MDAwMA==  # echo -n 0000 | base64
+  REPLICATION_PASSWORD: MDAwMA==
+  PGPOOL_PCP_USER: cGdwb29s  # echo -n pgpool | base64
+  PGPOOL_PCP_PASSWORD: MDAwMA==
+
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres2
+  labels:
+    app: postgres2
+    role: service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres2
+      role: service
+  serviceName: postgres2
+  template:
+    metadata:
+      labels:
+        app: postgres2
+        role: service
+    spec:
+      containers:
+        - name: postgres2
+          image: myssh 
+          imagePullPolicy: IfNotPresent  #若本地沒有該image才去拉取
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1Gi"
+              cpu: "1"              
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  key: POSTGRES_USER
+                  name: postgres2-secret
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: POSTGRES_PASSWORD
+                  name: postgres2-secret
+            - name: REPLICATION_PASSWORD 
+              valueFrom:
+                secretKeyRef:
+                  key: REPLICATION_PASSWORD
+                  name: postgres2-secret
+
+          lifecycle:    #hooks 
+            postStart:  #postStart: 容器啟動後立即觸發執行(與entrypoint異步執行,因此不能保證兩者順序)
+              exec:     
+                command:  #確定資料庫啟動後再執行以下命令
+                  - /bin/sh
+                  - -c
+                  - |
+                    until pg_isready -h localhost -p 5432; do
+                      sleep 1;
+                    done;
+                    psql -U $POSTGRES_USER -c "CREATE ROLE replication WITH REPLICATION PASSWORD '$REPLICATION_PASSWORD' LOGIN"
+                    echo "host replication all 0.0.0.0/0 trust" >> /var/lib/postgresql/data/pg_hba.conf;
+                    echo "wal_level = replica" >> /var/lib/postgresql/data/postgresql.conf;
+                    echo "max_wal_senders = 10" >> /var/lib/postgresql/data/postgresql.conf;
+                    echo "hot_standby = on" >> /var/lib/postgresql/data/postgresql.conf;
+                    echo "log_statement = all" >> /var/lib/postgresql/data/postgresql.conf; 
+                    echo "synchronous_commit = remote_apply" >> /var/lib/postgresql/data/postgresql.conf; 
+                    echo "synchronous_standby_names = '*'" >> /var/lib/postgresql/data/postgresql.conf; 
+                    echo "wal_log_hints = on" >> /var/lib/postgresql/data/postgresql.conf;           
+                    echo "primary_conninfo = 'host=postgres2-svc port=5432 user=postgres password=''0000'''" >> /var/lib/postgresql/data/postgresql.conf;
+                    echo "logging_collector = on" >> /var/lib/postgresql/data/postgresql.conf
+                    su -c '/usr/lib/postgresql/16/bin/pg_ctl restart -D /var/lib/postgresql/data' - postgres  
+
+          ports:
+            - containerPort: 5432
+              name: postgres2
+              protocol: TCP
+          volumeMounts:
+            - name: postgres2-volume
+              mountPath: /var/lib/postgresql/data
+         
+      volumes:
+        - name: postgres2-volume
+          persistentVolumeClaim:
+            claimName: postgres2-pvc
+
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres2-svc
+  labels:
+    app: postgres2-svc
+    role: service
+spec:
+  clusterIP: None # headless service
+  selector:
+    app: postgres2
+    role: service
+  ports:
+    - name: postgres2
+      port: 5432
+
+# 經測試若 postgres2-0 沒有使用 headless service
+# 雖然 pgpool pod 然仍然可以使用 DNS 當作host  pg_isready -h postgres2-svc.default.svc.cluster.local -U postgres2 -d postgres2 -p 5432
+# 但 pgpool pod 無法使用 sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@postgres2-svc.default.svc.cluster.local 進到 postgres2-0 pod

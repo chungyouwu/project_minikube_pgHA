@@ -195,19 +195,21 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
       touch ${NODE_PGDATA}/standby.signal
       su -c \"/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/data start\" - postgres
     else
-      echo \"node_id is old_main_node_id\"
+      echo \"node_id is old_main_node_id\ >> $log"
     fi      
     "
 
+    echo "SSPASS_EXIT_CODE: $?" >> $log
+
     if [ $NODE_ID_TRIMMED -ne $OLD_MAIN_NODE_ID ]; then
       /opt/pgpool-II/bin/pcp_attach_node -w -h localhost -U pgpool -p 9898 -n ${NODE_ID}
-      echo "pcp_attach_node success"
+      echo "CHUNG: pcp_attach_node success, follow primary command is completed successfully" >> $log
     else
       echo "CHUNG: pcp_attach_node failed" >> $log
-      exit 1    
-    fi
+      exit 1   
+
+    fi    
     
-    echo "CHUNG: follow primary command is completed successfully" >> $log
     exit 0
 
 
