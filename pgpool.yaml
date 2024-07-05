@@ -181,7 +181,9 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
     echo "new_primary_node_port: $NEW_PRIMARY_NODE_PORT" >> $log
     echo "new_primary_node_pgdata: $NEW_PRIMARY_NODE_PGDATA" >> $log
     echo "node_pgdata: $NODE_PGDATA" >> $log
-    
+
+
+    # sshpass to every nodes(except new primary DB node) and renew the primary conninfo 
     sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@${NODE_HOST}.default.svc.cluster.local "
     if [ $NODE_ID_TRIMMED -ne $OLD_MAIN_NODE_ID ]; then
       chown -R postgres:postgres ${NODE_PGDATA}
@@ -191,25 +193,35 @@ data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sam
       su -c \"/usr/lib/postgresql/16/bin/pg_rewind -D ${NODE_PGDATA} --source-server=\\\"user=postgres password=0000 host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} dbname=postgres\\\"\" - postgres
       echo \"primary_conninfo = 'host=${NEW_PRIMARY_NODE_HOST}.default.svc.cluster.local port=${NEW_PRIMARY_NODE_PORT} user=postgres application_name=${NODE_HOST}'\" >> ${NODE_PGDATA}/postgresql.auto.conf
       echo \"recovery_target_timeline = latest\" >>  ${NODE_PGDATA}/postgresql.auto.conf
+
+      # 刪除舊的 primary_conninfo 資訊
       sed -i -e \"0,/^primary_conninfo = .*/d\" ${NODE_PGDATA}/postgresql.auto.conf
       touch ${NODE_PGDATA}/standby.signal
+
+      # 需使用 -l 參數將 pg_ctl start 輸出轉到其他文件, 避免佔用前台導致此腳本後半段全卡住不執行 
       su -c \"/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/data -l /dev/null start\" - postgres
     else
-      echo \"node_id is old_main_node_id\" >> $log
+      echo \"node_id is old_main_node_id\"
     fi      
     "
 
     echo "SSPASS_EXIT_CODE: $?" >> $log
 
-    if [ $? -eq 0 ]; then
-      /opt/pgpool-II/bin/pcp_attach_node -w -h localhost -U pgpool -p 9898 -n ${NODE_ID}
-      echo "CHUNG: pcp_attach_node success, follow primary command is completed successfully" >> $log
-    else
-      echo "CHUNG: pcp_attach_node failed" >> $log
-      exit 1   
 
-    fi    
-    
+    # attach the renewed standby DB to the pgpool
+    if [ $NODE_ID_TRIMMED -ne $OLD_MAIN_NODE_ID ]; then
+      echo "THIS IS NOT OLD MAIN NODE(THE STOPPED ONE)" >> $log
+      if [ $? -eq 0 ]; then
+        /opt/pgpool-II/bin/pcp_attach_node -w -h localhost -U pgpool -p 9898 -n ${NODE_ID}
+        echo "CHUNG: pcp_attach_node success, follow primary command is completed successfully" >> $log
+      else
+        echo "CHUNG: pcp_attach_node failed" >> $log
+        exit 1  
+      fi    
+    else
+      echo "I'M THE STOPPED DB, BYE BYE"  >> $log
+    fi
+
     exit 0
 
 
