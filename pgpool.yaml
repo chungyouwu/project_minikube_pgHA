@@ -51,24 +51,14 @@ data:
     failover_command = '/test/failover.sh "%d" "%h" "%p" "%D" "%m" "%M" "%H" "%P" "%r" "%R"'
     follow_primary_command = '/test/follow_primary.sh "%d" "%h" "%p" "%D" "%m" "%M" "%H" "%P" "%r" "%R"'
 
-  # failover_command 參數必須加上雙引號, 否則會無法正確傳遞參數給 failover.sh
-  # follow_primary_command: Specifies a user command to run after failover on the primary node failover
-  # If we use 3 PostgreSQL servers, we need to specify follow_primary_command to run after failover on the primary node failover. 
-  # In case of two PostgreSQL servers, follow_primary_command setting is not necessary.
 
-
-  # If pool_hba.conf isn't configured, Pgpool-II will automatically generate it.
-  # Note that to use pool_hba.conf you must set enable_pool_hba = on.
-  #pool_hba.conf: |-
-  #  local      all         all                          trust
-  #  hostssl    all         all         0.0.0.0/0        scram-sha-256i
 
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: failover-script
-data:  # 必須提供 export PGPASSWORD='0000' 以下 psql 命令才能執行
+data:
   failover.sh: |
     #!/bin/bash
 
@@ -136,7 +126,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: followprimary-script
-data:  # https://git.postgresql.org/gitweb/?p=pgpool2.git;a=blob_plain;f=src/sample/scripts/follow_primary.sh.sample;hb=refs/heads/V4_4_STABLE
+data:  
   follow_primary.sh: |
     #!/bin/bash
     # This script is run after failover_command to synchronize the Standby with the new Primary.
@@ -242,9 +232,9 @@ spec:
       labels:
         app: pgpool
     spec:
-      securityContext: # 需要使用root權限才能執行 lifecycle 裡面的命令 
-        runAsUser: 0  # 這會以 root 用戶運行容器
-        fsGroup: 0    # 這會設置文件系統的組 ID 為 0
+      securityContext: 
+        runAsUser: 0  
+        fsGroup: 0    
       
       containers:
       - name: pgpool
@@ -253,7 +243,7 @@ spec:
         lifecycle:
           postStart:
             exec:
-              command:  # 需要先將由comfigmap掛載到/script/內的檔案複製出來, 否則該掛載資料夾下無法賦予執行權限(指向性檔案)
+              command:  
                 - /bin/bash
                 - -c
                 - |
@@ -286,11 +276,6 @@ spec:
         - name: PGPOOL_SKIP_PASSWORD_ENCRYPTION
           value: "false"
 
-        # The following settings are not required when not using the Pgpool-II PCP command.
-        # To enable the following settings, you must define a secret that stores the PCP user's
-        # username and password. 使用方法: 
-        # 1. kubectl exec -it pgpool-0 -- bash  
-        # 2. /opt/pgpool-II/etc$ /opt/pgpool-II/bin/pcp_node_count -h localhost -p 9898 -U postgres
         - name: PGPOOL_PCP_USER
           valueFrom:
             secretKeyRef:
@@ -323,7 +308,7 @@ spec:
 
       volumes:
       - name: pgpool-config
-        configMap:  #在環境變數中沒指定但有很多設定要應用，則將comfigmap 整個掛到容器讓它應用
+        configMap:  
           name: pgpool-config
       
       - name: failover-script
@@ -346,7 +331,7 @@ kind: Service
 metadata:
   name: pgpool-svc
 spec:
-  type: NodePort  # 用 minikube service pgpool-svc --url 開放給本機連線
+  type: NodePort  #  minikube service pgpool-svc --url 
   selector:
     app: pgpool
   ports:
@@ -354,4 +339,4 @@ spec:
     protocol: TCP
     port: 9999
     targetPort: 9999
-    nodePort: 30007  # 新增的port
+    nodePort: 30007  

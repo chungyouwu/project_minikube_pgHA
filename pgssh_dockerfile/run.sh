@@ -1,5 +1,4 @@
 #!/bin/bash
-# 遇到錯誤立即停止
 set -e
 
 # 啟動 sshd 服務

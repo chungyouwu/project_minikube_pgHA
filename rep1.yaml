@@ -65,7 +65,7 @@ spec:
         - name: replica1
           image: myssh 
           imagePullPolicy: IfNotPresent
-          command: ["/bin/sh", "-c"]  # 清空目標資料夾後才能basebackup, 啟動資料庫, 最後 tail 防止命令執行完畢後容器直接關閉
+          command: ["/bin/sh", "-c"]  
           args:
             - |
               until pg_isready -h $POSTGRES_PRIMARY_HOST -p 5432; do
@@ -125,12 +125,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: replica1-svc  # service 名稱
+  name: replica1-svc
   labels:
     app: postgres
     role: replica1
 spec:
-  clusterIP: None # headless service
+  clusterIP: None 
   selector:
     app: postgres
     role: replica1

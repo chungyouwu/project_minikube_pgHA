@@ -65,7 +65,7 @@ spec:
       containers:
         - name: postgres
           image: myssh 
-          imagePullPolicy: IfNotPresent  #若本地沒有該image才去拉取
+          imagePullPolicy: IfNotPresent
           resources:
             requests:
               memory: "512Mi"
@@ -90,10 +90,10 @@ spec:
                   key: REPLICATION_PASSWORD
                   name: postgres-secret
 
-          lifecycle:    #hooks 
-            postStart:  #postStart: 容器啟動後立即觸發執行(與entrypoint異步執行,因此不能保證兩者順序)
+          lifecycle: 
+            postStart: 
               exec:     
-                command:  #確定資料庫啟動後再執行以下命令
+                command: 
                   - /bin/sh
                   - -c
                   - |
@@ -144,6 +144,3 @@ spec:
     - name: postgres
       port: 5432
 
-# 經測試若 postgres-0 沒有使用 headless service
-# 雖然 pgpool pod 然仍然可以使用 DNS 當作host  pg_isready -h postgres-svc.default.svc.cluster.local -U postgres -d postgres -p 5432
-# 但 pgpool pod 無法使用 sshpass -p 0000 ssh -p 22 -o StrictHostKeyChecking=no root@postgres-svc.default.svc.cluster.local 進到 postgres-0 pod
