@@ -67,14 +67,23 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c"]  
           args:
-            - |
+            - |              
+              set -o xtrace
+
               until pg_isready -h $POSTGRES_PRIMARY_HOST -p 5432; do
                 sleep 1;
               done;
               echo "DB is started! Deleting /var/lib/postgresql/data";
+
               if [ "$(ls -A /var/lib/postgresql/data)" ]; then
-                rm -rf /var/lib/postgresql/data/*;
+                rm -rf /var/lib/postgresql/data/;
+                echo "deleteing completed!"
               fi
+
+              if [ "$(ls -A /var/lib/postgresql/data)" ]; then
+                echo "/var/lib/postgresql/data is not empty! Failed to delete";
+                exit 1
+              fi           
 
               pg_basebackup -h postgres-svc -p 5432 -R -U postgres -D /var/lib/postgresql/data --checkpoint=fast;
               echo "pg_basebackup completed successfully.";
