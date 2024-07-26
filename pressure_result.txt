@@ -1,0 +1,200 @@
+PostgreSQL DB pressure test by pgbench
+
+result:
+在本地透過 postgres pod 連線 DB 不影響速率
+在本地透過 pgpool pod 連線 DB 速率下降約五倍
+
+statement latencies:
+ - IN POSTGRES POD : 9.242 
+ - IN PGPOOL POD : 10.247
+ - IN LOCAL -> POSTGRES POD : 9.290
+ - IN LOCAL -> PGPOOL POD : 43.179
+
+
+
+# IN POSTGRES POD
+# kubectl exec -it postgres-0 -- bash
+
+pgbench -h localhost -p 5432 -U postgres -f ./pressure_test2.sql -c 5 -t 10 -r postgres
+transaction type: ./pressure_test2.sql
+scaling factor: 1
+query mode: simple
+number of clients: 5
+number of threads: 1
+maximum number of tries: 1
+number of transactions per client: 10
+number of transactions actually processed: 50/50
+number of failed transactions: 0 (0.000%)
+latency average = 9.955 ms
+initial connection time = 9.533 ms
+tps = 502.285399 (without initial connection time)
+statement latencies in milliseconds and failures:
+         9.242           0  DO $$
+
+
+pgbench -h localhost -p 5432 -U postgres -f ./pressure_test2.sql -c 20 -t 10 -r postgres
+transaction type: ./pressure_test2.sql
+scaling factor: 1
+query mode: simple
+number of clients: 20
+number of threads: 1
+maximum number of tries: 1
+number of transactions per client: 10
+number of transactions actually processed: 200/200
+number of failed transactions: 0 (0.000%)
+latency average = 51.699 ms
+initial connection time = 32.628 ms
+tps = 386.853181 (without initial connection time)
+statement latencies in milliseconds and failures:
+        47.631           0  DO $$
+
+
+
+
+
+
+
+# IN PGPOOL POD
+# kubectl exec -it pgpool-0 -- bash
+
+pgbench -h localhost -p 9999 -U postgres -f /home/pressure_test2.sql -c 5 -t 10 -r postgres
+transaction type: /home/pressure_test2.sql
+scaling factor: 1
+query mode: simple
+number of clients: 5
+number of threads: 1
+maximum number of tries: 1
+number of transactions per client: 10
+number of transactions actually processed: 50/50
+number of failed transactions: 0 (0.000%)
+latency average = 11.051 ms
+initial connection time = 93.509 ms
+tps = 452.439554 (without initial connection time)
+statement latencies in milliseconds and failures:
+        10.247           0  DO $$
+
+
+pgbench -h localhost -p 9999 -U postgres -f /home/pressure_test2.sql -c 20 -t 10 -r postgres
+transaction type: /home/pressure_test2.sql
+scaling factor: 1
+query mode: simple
+number of clients: 20
+number of threads: 1
+maximum number of tries: 1
+number of transactions per client: 10
+number of transactions actually processed: 200/200
+number of failed transactions: 0 (0.000%)
+latency average = 59.211 ms
+initial connection time = 370.585 ms
+tps = 337.774505 (without initial connection time)
+statement latencies in milliseconds and failures:
+        49.261           0  DO $$
+
+
+
+
+
+
+#IN LOCAL -> POSTGRES POD
+
+#kubectl port-forward svc/postgres-svc 5433:5432
+pgbench -h localhost -p 5433 -U postgres -f .\pressure_test1.sql -c 5 -t 10 -r postgres
+transaction type: .\pressure_test1.sql
+scaling factor: 1
+query mode: simple
+number of clients: 5
+number of threads: 1
+maximum number of tries: 1
+number of transactions per client: 10
+number of transactions actually processed: 50/50
+number of failed transactions: 0 (0.000%)
+latency average = 9.810 ms
+initial connection time = 77.346 ms
+tps = 509.678800 (without initial connection time)
+statement latencies in milliseconds and failures:
+         9.290           0  CALL transfer_funds(1, 2, 1, 'test', 'transfer')
+
+
+
+
+
+
+#IN LOCAL -> PGPOOL POD
+
+#minikube service pgpool-svc --url
+#http://127.0.0.1:55156
+pgbench -h localhost -p 55156 -U postgres -f .\pressure_test1.sql -c 5 -t 10 -r postgres
+transaction type: .\pressure_test1.sql
+scaling factor: 1
+query mode: simple
+number of clients: 5
+number of threads: 1
+maximum number of tries: 1
+number of transactions per client: 10
+number of transactions actually processed: 50/50
+number of failed transactions: 0 (0.000%)
+latency average = 48.028 ms
+initial connection time = 727.258 ms
+tps = 104.105938 (without initial connection time)
+statement latencies in milliseconds and failures:
+        43.179           0  CALL transfer_funds(1, 2, 1, 'test', 'transfer')
+
+
+
+
+# OTERH
+# IN POSTGRES POD
+連線數測試:
+ - 參數:
+  - postgresql.conf:
+   - max_connections: 100
+
+  - pgpool.conf:
+   - num_init_children = 32
+   - max_pool = 4
+
+result: 
+連線數 -c 99 能夠順利執行
+連線數 -c 100 顯示過多連線錯誤
+
+postgres@postgres-0:~/data$ pgbench -h localhost -p 5432 -U postgres -f ./pressure_test2.sql -c 99 -t 1 -r postgres
+    transaction type: ./pressure_test2.sql
+    scaling factor: 1
+    query mode: simple
+    number of clients: 99
+    number of threads: 1
+    maximum number of tries: 1
+    number of transactions per client: 1
+    number of transactions actually processed: 99/99
+    number of failed transactions: 0 (0.000%)
+    latency average = 741.190 ms
+    initial connection time = 200.424 ms
+    tps = 133.568990 (without initial connection time)
+    statement latencies in milliseconds and failures:
+        514.861           0  DO $$
+
+
+
+pgbench -h localhost -p 5432 -U postgres -f ./pressure_test2.sql -c 100 -t 1 -r postgres
+    pgbench: error: connection to server at "localhost" (::1), port 5432 failed: FATAL:  sorry, too many clients already
+    pgbench: error: could not create connection for client 99
+
+
+
+
+
+
+
+
+
+NOTE:
+
+kubectl apply -f .\master.yaml
+kubectl apply -f .\rep1.yaml
+kubectl apply -f .\rep2.yaml
+kubectl apply -f .\pgpool.yaml
+
+minikube service pgpool-svc --url
+kubectl port-forward svc/postgres-svc 5433:5432
+
+select * from account_information order by account_id limit 5;
