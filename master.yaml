@@ -33,8 +33,8 @@ kind: Secret
 metadata:
   name: postgres-secret
 type: Opaque
-data:
-  POSTGRES_USER: cG9zdGdyZXM=  #  echo -n postgres | base64
+data:                          # base64 編碼可以將二進制數據（例如文件或圖像）轉換為 ASCII 字符,避免特殊符號在不同程式出現問題
+  POSTGRES_USER: cG9zdGdyZXM=  # echo -n postgres | base64
   POSTGRES_PASSWORD: MDAwMA==  # echo -n 0000 | base64
   REPLICATION_PASSWORD: MDAwMA==
   PGPOOL_PCP_USER: cGdwb29s  # echo -n pgpool | base64
