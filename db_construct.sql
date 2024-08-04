@@ -75,7 +75,7 @@ USING( current_user = 'postgres');
 
 
 
-CREATE TABLE account_info_his(
+CREATE TABLE account_cred_his(
     his_id serial primary key,
     his_time timestamp default current_timestamp,
     old_password VARCHAR(50),
@@ -87,7 +87,7 @@ CREATE TABLE account_info_his(
 CREATE FUNCTION account_cred_tg_fn()
 RETURNS trigger AS $$
 BEGIN
-INSERT INTO account_info_his(old_password, new_password) 
+INSERT INTO account_cred_his(old_password, new_password) 
 VALUES(OLD.password, NEW.password);
 RETURN NEW;
 END $$
@@ -117,7 +117,7 @@ CREATE TABLE marketsurvey(
 
 
 -- 交易功能&歷史紀錄 #procedure
-CREATE TABLE transaction_history (
+CREATE TABLE account_info_trans_history (
     trans_id SERIAL PRIMARY KEY,
     trans_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     trans_sourceid int REFERENCES account_information(account_id) NOT NULL,     
@@ -143,7 +143,7 @@ BEGIN
     raise notice 'both account exist, transaction starting...';
     update account_information set balance=balance - amount where account_id = m_from;
     update account_information set balance=balance + amount where account_id = m_to;
-    insert into transaction_history(trans_sourceid,trans_amount,trans_targetid, trans_reason, trans_method) 
+    insert into account_info_trans_history(trans_sourceid,trans_amount,trans_targetid, trans_reason, trans_method) 
     values(m_from,amount,m_to, reason, method);
         
   else 

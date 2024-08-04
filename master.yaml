@@ -110,6 +110,7 @@ spec:
                     echo "synchronous_standby_names = '*'" >> /var/lib/postgresql/data/postgresql.conf; 
                     echo "wal_log_hints = on" >> /var/lib/postgresql/data/postgresql.conf;           
                     echo "primary_conninfo = 'host=postgres-svc port=5432 user=postgres password=''0000'''" >> /var/lib/postgresql/data/postgresql.conf;
+                    echo "shared_preload_libraries = 'pg_stat_statements'" >> /var/lib/postgresql/data/postgresql.conf;
                     echo "logging_collector = on" >> /var/lib/postgresql/data/postgresql.conf
                     su -c '/usr/lib/postgresql/16/bin/pg_ctl restart -D /var/lib/postgresql/data' - postgres  
 
