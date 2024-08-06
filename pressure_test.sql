@@ -1,6 +1,6 @@
 DO $$
 DECLARE
-    reason TEXT := 'test't;
+    reason TEXT := 'test';
     method PAYBY := 'credit card'::payby;
     m_from INT := 1;
     m_to INT := FLOOR(random() * 1000 + 1)::int;
