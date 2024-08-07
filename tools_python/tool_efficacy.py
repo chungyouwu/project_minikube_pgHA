@@ -18,17 +18,21 @@ def collect_metrics():
 
     cur.execute(query)
     metrics_bkno = cur.fetchall()
-    
+    bkno = [desc[0] for desc in cur.description]
 
     cur.execute("SELECT current_database();")
     metrics_currentdb = cur.fetchall()
-
+    
+    
+    cur.close()
     conn.close()
-    return metrics_bkno, metrics_currentdb
+    return bkno, metrics_bkno, metrics_currentdb
 
 while True:
-    metrics_bkno, metrics_currentdb = collect_metrics()
-    # 在此處可以選擇將指標保存到文件或數據庫
+    # 解構賦值（Destructuring Assignment）
+    bkno, metrics_bkno, metrics_currentdb = collect_metrics()
+    
+    print(bkno)
     print(metrics_bkno)
     print(metrics_currentdb)
-    time.sleep(10)  # 每五分鐘收集一次指標
+    time.sleep(10)  
