@@ -331,7 +331,7 @@ kind: Service
 metadata:
   name: pgpool-svc
 spec:
-  type: NodePort  #  minikube service pgpool-svc --url 
+  type: NodePort  
   selector:
     app: pgpool
   ports:
