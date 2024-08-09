@@ -47,9 +47,9 @@ FROM account_information;
 
 
 -- 生成市場調查資料
-INSERT INTO marketsurvey (survey_title, survey_des, survey_response)
-SELECT 'Survey ' || i, 'Description ' || i, jsonb_build_object('response', 'response' || i)
-FROM generate_series(1, 10) i;
+--INSERT INTO marketsurvey (survey_title, survey_des, survey_response)
+--SELECT 'Survey ' || i, 'Description ' || i, jsonb_build_object('response', 'response' || i)
+--FROM generate_series(1, 10) i;
 
 
 
