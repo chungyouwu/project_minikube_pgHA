@@ -45,16 +45,11 @@ SELECT account_id,
        LPAD(FLOOR(random()*10000)::text,4,'0')
 FROM account_information;
 
-
+/*
 -- 生成市場調查資料
---INSERT INTO marketsurvey (survey_title, survey_des, survey_response)
---SELECT 'Survey ' || i, 'Description ' || i, jsonb_build_object('response', 'response' || i)
---FROM generate_series(1, 10) i;
-
-
-
-
-
+INSERT INTO marketsurvey (survey_title, survey_des, survey_response)
+SELECT 'Survey ' || i, 'Description ' || i, jsonb_build_object('response', 'response' || i)
+FROM generate_series(1, 10) i;
 
 
 
@@ -72,13 +67,5 @@ insert into account_information(user_id, bank_id, bank_region, balance, opendate
 
 insert into account_credentials(account_id, password) values(0,'1111');
 insert into account_credentials(account_id, password) values(1,'2222');
+*/
 
-INSERT INTO marketsurvey(survey_title,survey_des,survey_response) VALUES(
-    'Customer Satisfaction Survey',
-    'Please provide your feedback on our service',
-    '{"Q0:Survey date":"2024-07-23",
-      "Q1:What is your bank account number?":"1234567890",
-      "Q2: satisfaction":{"service":"8",
-                          "efficiency":"6",
-                          "quality":"7"}
-}');

@@ -1,0 +1,10 @@
+
+echo primary_conninfo = \'host=replica1-svc.default.svc.cluster.local port=5432 user=postgres application_name=postgres-svc\' >> /var/lib/postgresql/data/postgresql.auto.conf
+	
+echo recovery_target_timeline = latest >> /var/lib/postgresql/data/postgresql.auto.conf
+
+touch /var/lib/postgresql/data/standby.signal
+
+pg_rewind --target-pgdata /var/lib/postgresql/data --source-server='host=replica1-svc.default.svc.cluster.local port=5432 dbname=postgres user=postgres password=0000'
+
+pg_ctl start

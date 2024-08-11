@@ -163,7 +163,8 @@ GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO chung;
 
 
 
-
-
+-- 新增 extension
+CREATE extension pg_stat_statements;
+CREATE EXTENSION pg_buffercache;
 
 

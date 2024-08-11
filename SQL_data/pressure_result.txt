@@ -10,6 +10,8 @@ statement latencies:
  - IN LOCAL -> POSTGRES POD : 9.290
  - IN LOCAL -> PGPOOL POD : 43.179
 
+conclusion:
+推測使用 pgpool 執行效率反而下降可能是多一個 pod 溝通導致
 
 
 # IN POSTGRES POD
