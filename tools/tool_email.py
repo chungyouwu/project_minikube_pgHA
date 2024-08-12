@@ -3,7 +3,7 @@ from email.mime.text import MIMEText
 import configparser
 
 config = configparser.ConfigParser()
-with open('email.ini', 'r', encoding='utf-8') as f:
+with open('./tools/email.ini', 'r', encoding='utf-8') as f:
     config.read_file(f) 
 
 smtp_user = config['smtp']['user']

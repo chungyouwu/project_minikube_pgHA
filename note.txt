@@ -1,3 +1,25 @@
+yaml & SQL 架構介紹
+kubectl port-forward svc/pgpool-svc 8888:9999
+
+壓力測試
+pgbench -U postgres -h localhost -p 8888  -f .\SQL_data\pressure_test.sql -T 5 -c 2 postgres 
+
+資料匯入
+kubectl cp ./SQL_data/survey.csv postgres-0:/var/lib/postgresql/data
+kubectl exec -it postgres-0 -- bash
+copy marketsurvey(survey_title, survey_des, survey_response) from '/var/lib/postgresql/data/survey.csv' with(format csv, header true, quote '"', escape '"');
+
+效能與健康
+my_note.sql
+
+附載均衡
+loadbalance_test.py
+show pool_nodes;
+
+
+
+
+failback:
 
 echo primary_conninfo = \'host=replica1-svc.default.svc.cluster.local port=5432 user=postgres application_name=postgres-svc\' >> /var/lib/postgresql/data/postgresql.auto.conf
 	
