@@ -215,6 +215,35 @@ data:
     exit 0
 
 
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pgpool-pv
+spec:
+  accessModes:
+    - ReadWriteOnce
+  capacity:
+    storage: 2Gi
+  hostPath:
+    path: /data/pgpool
+  storageClassName: standard
+
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pgpool-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  volumeName: pgpool-pv
+
+
 
 ---
 apiVersion: apps/v1
@@ -254,6 +283,17 @@ spec:
                   chmod 777 /test/follow_primary.sh;
                   echo 'localhost:9898:pgpool:0000' >> /root/.pcppass;
                   chmod 600 /root/.pcppass;
+
+                  while ! /opt/pgpool-II/bin/pcp_node_info -h localhost -p 9898 -U pgpool 0; do
+                    echo 'waiting pgpool to start'
+                    sleep 1
+                  done;
+                  
+                  /opt/pgpool-II/bin/pg_enc -k /opt/pgpool-II/etc/.pgpoolkey -f /opt/pgpool-II/etc/pgpool.conf -m -u chung 0000;       
+                  /opt/pgpool-II/bin/pg_enc -k /opt/pgpool-II/etc/.pgpoolkey -f /opt/pgpool-II/etc/pgpool.conf -m -u abel 0000;       
+                  /opt/pgpool-II/bin/pgpool reload;                  
+
+
         env:
         - name: POSTGRES_USERNAME  #在postgres-secret變數為 POSTGRES_USER
           valueFrom:
@@ -302,6 +342,9 @@ spec:
         - name: followprimary-script 
           mountPath: /script/follow_primary.sh
           subPath: follow_primary.sh
+
+        - name: pgpool-volume
+          mountPath: /opt/pgpool-II/etc/
           
         #- name: pgpool-tls
         #  mountPath: /config/tls
@@ -318,6 +361,13 @@ spec:
       - name: followprimary-script 
         configMap:
           name: followprimary-script
+
+      - name: pgpool-volume
+        persistentVolumeClaim:
+          claimName: pgpool-pvc
+
+
+
       # Configure your own TLS certificate.
       # If not set, Pgpool-II will automatically generate the TLS certificate if ssl = on.
       #- name: pgpool-tls
