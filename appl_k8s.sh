@@ -6,7 +6,7 @@ kubectl wait --for=condition=ready pod -l app=postgres,role=service --timeout=60
 echo "MASTER POD IS READY"
 
 kubectl apply -f /d/my_minikube/my_postgres/rep1.yaml 
-kubectl wair --for=condition=ready pod -l app=postgres,role=replica1 --timeout=60s
+kubectl wait --for=condition=ready pod -l app=postgres,role=replica1 --timeout=60s
 echo "REP1 POD IS READY"
 
 kubectl apply -f /d/my_minikube/my_postgres/rep2.yaml 
